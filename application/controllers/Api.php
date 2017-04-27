@@ -222,7 +222,7 @@ class Api extends CI_Controller
 		$this->load->view('apiTemplate',$data);
 	}
 
-	//通过id查找剧的详细信息
+	//通过id查找剧的详细信息 (旧)
 	public function searchByShowId($id='')
 	{
 		$id = intval($this->input->get('id',true));
@@ -276,6 +276,103 @@ class Api extends CI_Controller
 		$this->load->view('apiTemplate',$data);
 	}
 
+	//通过id查找剧的详细信息 (新 2017.4.23) 
+	//(4.26)增加功能: 每一集显示是否已经观看
+	public function getShowDetailsWithId($id=''){
+		$id = intval($this->input->get('id',true));
+		$u_id = intval($this->input->get('u_id',true));
+		$token = $this->db->escape($this->input->get('u_token',true));
+		if (!empty($u_id)) 
+		{
+			$this->checkLogin($u_id,$token);
+		}
+		$this->load->model('ShowModel');
+		$errno = 1;
+		$err = '';
+		$rsm = null;
+		if (empty($id)) 
+		{
+			$errno = 4;
+			$err = $this->errorList[$errno].'missing parameters';
+		}
+		else
+		{
+			$rsm['show'] = $this->ShowModel->searchByShowId($id);
+			$rsm['seasons'] = $this->ShowModel->getEpsBySid($rsm['show']['s_id']);
+			$rsm['show']['count_of_se'] = $rsm['seasons'][0]['se_id'];
+            $rsm['show']['next_ep_time'] = "";
+			//获取下一期更新时间
+			// $list = $rsm['seasons'][0]['episodes'];
+			// for ($i=0; $i < count($list); $i++) { 
+			// 	if ($list[$i]['e_status'] == "即将播出") {
+			// 		$rsm['show']['next_ep_time'] = $list[$i]['e_time'];
+			// 		break;
+			// 	}
+			// }
+			for ($i=0; $i < intval($rsm['seasons'][0]['se_id']); $i++) { 
+				$temp = 0;
+				$list = $rsm['seasons'][$i]['episodes'];
+				for ($j=0; $j < count($list); $j++) { 
+					if ($list[$j]['e_status'] == "0") {
+						$rsm['show']['next_ep_time'] = $list[$j]['e_time'];
+						$temp = 1;
+						break;
+					}
+				}
+				if ($temp == 1) {
+					break;
+				}
+			}
+
+			//获取最后一集 已播放剧的时间
+			for ($i=0; $i < intval($rsm['seasons'][0]['se_id']); $i++) { 
+				$temp = 0;
+				$list = $rsm['seasons'][$i]['episodes'];
+				for ($j=intval($rsm['seasons'][$i]['count_of_ep'])-1; $j >= 0 ; $j--) {
+					// echo "当前剧是第几集" .  $list[$j]['e_num'];
+					if ($list[$j]['e_status'] == "1") {
+						$rsm['show']['last_se_id'] = $rsm['seasons'][$i]['se_id'];
+						$rsm['show']['last_ep_num'] = $list[$j]['e_num'];
+						$temp = 1;
+						break;
+					}
+				}
+				if ($temp == 1) {
+					break;
+				}
+			}
+
+
+			if (!empty($u_id)) 
+			{
+				if ($this->ShowModel->checkSubscribe($u_id,$id)) 
+				{
+					$rsm['subscribed'] = True;
+				}
+				else
+				{
+					$rsm['subscribed'] = False;
+				}
+			}
+			else
+			{
+				$rsm['subscribed'] = False;
+			}
+			if (empty($rsm['show'])) 
+			{
+				$errno = 3;
+				$err = $this->errorList[$errno].'Server response with an empty set';
+			}
+		}
+		
+
+		$data['output'] = array(
+			'errno' => $errno,
+			'err' => $err,
+			'rsm' => $rsm
+			);
+		$this->load->view('apiTemplate',$data);
+	}
 	//输入中英文名查找剧的方法
 	public function searchByName()
 	{
