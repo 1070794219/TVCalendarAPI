@@ -112,6 +112,7 @@ class ShowModel extends CI_Model{
 					LIMIT 1")->row_array();
 				$rs['s_description'] = $description['resource_content'];
  			}
+ 			$rs['s_sibox_image'] = "http:" . $rs['s_sibox_image'];
 			$rs['s_sibig_image'] = str_replace('sibox', 'sibig', $rs['s_sibox_image']);
 			return $rs;
 		}
@@ -135,12 +136,49 @@ class ShowModel extends CI_Model{
 			return null;
 	}
 
-	//根据剧的id查找所有属于其的集的方法,返回的是简略信息:
+	//根据剧的id查找所有属于其的集的方法,返回的是简略信息: （旧）
 	//返回e_id,se_id,e_num,e_name,e_status,e_time
+
 	public function searchEpsBySid($id='')
 	{
 		$rs = $this->db->query("SELECT e_id,se_id,e_num,e_name,e_status,e_time 
 			from `episode` WHERE s_id = {$id} ORDER BY se_id DESC , e_num DESC ")->result_array();
+		if(!is_null($rs[0]))
+			return $rs;
+		else
+			return null;
+	}
+
+	//根据剧的id查找所有属于其的集并按照季分类的方法,返回的是简略信息: (新 2017.4.23)
+	//返回e_id,se_id,e_num,e_name,e_status,e_time
+	public function getEpsBySid($id='')
+	{
+		$u_id = intval($this->input->get('u_id',true));
+
+		$seasons = $this->db->query("SELECT se_id from `episode` WHERE s_id = {$id} ORDER BY se_id DESC ")->result_array();
+		$season_id = $seasons[0]['se_id'];
+		for ($i=0,$j=$season_id; $i < $j,$season_id > 0; $i++,$season_id--) { 
+			$rs[$i]['se_id'] = "$season_id";
+			$rs[$i]['episodes'] = $this->db->query("SELECT e_id,e_num,e_name,e_status,e_time from `episode` WHERE s_id = {$id} AND se_id = {$season_id} ORDER BY e_num ASC ")->result_array();
+			for ($j=0; $j < count($rs[$i]['episodes']); $j++) {
+				$rs[$i]['episodes'][$j]['e_Syn'] = "0";
+				if (!empty($u_id)) {
+					$synFlag = $this->ShowModel->checkSyn($u_id,$rs[$i]['episodes'][$j]['e_id']);
+					if ($synFlag) {
+						$rs[$i]['episodes'][$j]['e_Syn'] = true;
+					}else{
+						$rs[$i]['episodes'][$j]['e_Syn'] = false;
+					}
+				}
+				if ($rs[$i]['episodes'][$j]['e_status'] == "已播放") {
+					$rs[$i]['episodes'][$j]['e_status'] = true;
+				}else{
+					$rs[$i]['episodes'][$j]['e_status'] = false;
+				}
+			}
+			$count_of_ep = count($rs[$i]['episodes']);
+			$rs[$i]['count_of_ep'] = "$count_of_ep";
+		}
 		if(!is_null($rs[0]))
 			return $rs;
 		else
@@ -323,6 +361,11 @@ class ShowModel extends CI_Model{
 			LEFT JOIN subscribe ON `shows`.`s_id` = `subscribe`.`s_id` 
 			WHERE `subscribe`.`u_id` = {$u_id} 
 			ORDER BY  `subscribe`.`sub_time` DESC;")->result_array();
+		//4.27 将imageurl添加http，增加大图字段
+		for ($i=0; $i < count($rs); $i++) { 
+			$rs[$i]['s_sibox_image'] = "http:" . $rs[$i]['s_sibox_image'];
+			$rs[$i]['s_sibig_image'] = str_replace('sibox', 'sibig', $rs[$i]['s_sibox_image']);
+		}
 		if(!is_null($rs))
 			return $rs;
 		else
