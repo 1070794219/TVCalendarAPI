@@ -22,8 +22,8 @@ class ShowModel extends CI_Model{
 				'e_time' => $rs['e_time'],
 				's_name' => $rs['s_name'],
 				's_name_cn' => $rs['s_name_cn'],
-				's_sibox_image' => $rs['s_sibox_image'],
-				's_vertical_image' => str_replace('sibox', 'vertical', $rs['s_sibox_image']),
+				's_sibox_image' => "http:" . $rs['s_sibox_image'],
+				's_vertical_image' => "http:" . str_replace('sibox', 'vertical', $rs['s_sibox_image']),
 				'area' => $rs['area'],
 				'channel' => $rs['channel']
 				);
@@ -58,7 +58,7 @@ class ShowModel extends CI_Model{
 				'e_date' => substr($rs['e_time'], 0,10),
 				's_name' => $rs['s_name'],
 				's_name_cn' => $rs['s_name_cn'],
-				's_sibox_image' => $rs['s_sibox_image'],
+				's_sibox_image' => "http:" . $rs['s_sibox_image'],
 				'area' => $rs['area'],
 				'channel' => $rs['channel']
 				);
@@ -336,7 +336,7 @@ class ShowModel extends CI_Model{
 		$date = date('Y-m-d 08:00:00',strtotime("$date - $beforeDay day"));
 		$future = date('Y-m-d 08:00:00',strtotime("$future + $afterDay day"));
 
-		$rs = $this->db->query("SELECT `shows`.`s_id`,e_id,se_id,s_name,s_name_cn,s_sibox_image,e_num,e_time,e_status,r_id
+		$rs = $this->db->query("SELECT `shows`.`s_id`,e_id,se_id,s_name,s_name_cn,s_sibox_image,e_num,e_name,e_time,e_status,r_id
 			FROM episode 
 			LEFT JOIN shows ON `episode`.`s_id` = `shows`.`s_id` 
 			LEFT JOIN subscribe ON `shows`.`s_id` = `subscribe`.`s_id` 
@@ -346,6 +346,10 @@ class ShowModel extends CI_Model{
 		{
 			foreach ($rs as &$one) 
 			{
+				//4.27 将imageurl添加http，增加大图字段
+				$one['s_sibox_image'] = "http:" . $one['s_sibox_image'];
+				$one['s_sibig_image'] = str_replace('sibox', 'sibig', $one['s_sibox_image']);
+				//end
 				$one['s_vertical_image'] = str_replace('sibox', 'vertical', $one['s_sibox_image']);
 			}
 			return $rs;
@@ -361,14 +365,15 @@ class ShowModel extends CI_Model{
 			LEFT JOIN subscribe ON `shows`.`s_id` = `subscribe`.`s_id` 
 			WHERE `subscribe`.`u_id` = {$u_id} 
 			ORDER BY  `subscribe`.`sub_time` DESC;")->result_array();
-		//4.27 将imageurl添加http，增加大图字段
-		for ($i=0; $i < count($rs); $i++) { 
-			$rs[$i]['s_sibox_image'] = "http:" . $rs[$i]['s_sibox_image'];
-			$rs[$i]['s_sibig_image'] = str_replace('sibox', 'sibig', $rs[$i]['s_sibox_image']);
-		}
-		if(!is_null($rs))
+		if(!is_null($rs)){
+			//4.27 将imageurl添加http，增加大图字段
+			foreach($rs as &$oners){
+				$oners['s_sibox_image'] = "http:" . $oners['s_sibox_image'];
+				$oners['s_sibig_image'] = str_replace('sibox', 'sibig', $oners['s_sibox_image']);
+			}
+			//end
 			return $rs;
-		else
+		}else
 			return null;
 	}
 
@@ -382,6 +387,8 @@ class ShowModel extends CI_Model{
 		{
 			foreach ($rs as &$one) 
 			{
+				$one['s_sibox_image'] = "http:" . $one['s_sibox_image'];
+
 				$one['s_vertical_image'] = str_replace('sibox', 'vertical', $one['s_sibox_image']);
 			}
 			return $rs;
@@ -574,5 +581,122 @@ class ShowModel extends CI_Model{
 		if ($denominator['denominator'] == 0)
 			return 0.0;
 		return $numerator['numerator']/$denominator['denominator'];
+	}
+
+	
+	//xzk新增函数
+
+	//获取最后一集 已播放剧的时间
+	public function getLastEpInfo($id = ''){
+		$season = $this->db->query("SELECT se_id FROM episode WHERE s_id = $id ORDER BY se_id DESC")->row_array();
+		$se_num = intval($season['se_id']);
+		$temp = 0;
+		$res = null;
+		$res['last_se_id'] = 0;
+		$res['last_ep_num'] = 0;
+		for ($i=$se_num; $i > 0; $i--) { 
+			$episodes = $this->db->query("SELECT e_status,e_num FROM episode WHERE s_id = $id AND se_id = $i ORDER BY e_id DESC")->result_array();
+			foreach($episodes as $one){
+				if ($one['e_status'] == "已播放") {
+					$res['last_se_id'] = "$i";
+					$res['last_ep_num'] = $one['e_num'];
+					$temp = 1;
+				}
+			}
+			if ($temp == 1) {
+				break;
+			}
+		}
+		return $res;
+	}
+
+	//4.27影视库功能
+	public function getShowFilter($c){
+		if ($c < 'A' || $c > 'z') {
+			$c = "[^[:alpha:]]";
+		}
+		$rsm = $this->db->query("SELECT s_id,s_name,s_name_cn,status,length,area,channel,s_sibox_image FROM shows WHERE s_name REGEXP '^$c'")->result_array();
+		
+		if (!is_null($rsm)) {
+			foreach($rsm as &$one){
+				$one['s_sibox_image'] = "http:" . $one['s_sibox_image'];
+				$one['s_sibig_image'] = str_replace('sibox', 'sibig', $one['s_sibox_image']);
+				$one['s_vertical_image'] = str_replace('sibox', 'vertical',$one['s_sibox_image']);
+				$result = $this->getLastEpInfo(intval($one['s_id']));
+				$one['last_se_id'] = $result['last_se_id'];
+				$one['last_ep_num'] = $result['last_ep_num'];
+			}
+		}
+		return $rsm;
+	}
+
+	//4.29 获取每部剧的总集数
+	public function getNumbersOfEp($s_id = ''){
+		$rs = $this->db->query("SELECT COUNT(e_id) AS num FROM `episode` 
+			WHERE s_id = $s_id")->row_array();
+		if(!is_null($rs))
+			return $rs['num'];
+		else
+			return null;
+	}
+
+	//5.1 获取每部剧已看过的总集数
+	public function getWatchedNumbersOfEp($u_id,$s_id){
+		$rs = $this->db->query("SELECT COUNT(*) AS num FROM episode AS ep,synchron AS syn WHERE syn.u_id = $u_id AND ep.s_id = $s_id AND ep.e_id = syn.e_id")->row_array();
+		if (!is_null($rs)) {
+			return $rs['num'];
+		}else{
+			return null;
+		}
+	}
+
+	//整季订阅
+	public function subscribeFullSeason($u_id,$s_id,$se_id){
+		$rs = $this->db->query("SELECT e_id FROM episode WHERE s_id = $s_id AND se_id = $se_id AND e_status = '已播放'")->result_array();
+		for ($i=0; $i < count($rs); $i++) { 
+			$e_id = $rs[$i]['e_id'];
+			$date = date('Y-m-d H:i:s');
+			if ($i == 0) {
+				$sql = "INSERT IGNORE INTO synchron (u_id, e_id,syn_time) VALUES ($u_id,$e_id,'{$date}')";
+			}else{
+				$sql .= ",($u_id,$e_id,'{$date}')";
+			}
+		}
+
+		$this->db->query($sql);
+
+		if ($this->db->affected_rows()) {
+			return array('OK' => "S" . $se_id);
+		}else{
+			return "Repeat";
+		}
+
+		return null;
+	}
+
+	//取消整季订阅
+	public function cancelSubscribeFullSeason($u_id,$s_id,$se_id){
+		$rs = $this->db->query("SELECT ep.e_id FROM synchron AS sy,episode AS ep WHERE s_id = $s_id AND se_id = $se_id AND e_status = '已播放' AND sy.e_id = ep.e_id AND u_id = $u_id")->result_array();
+		if (count($rs)) {
+			for ($i=0; $i < count($rs); $i++) { 
+				$e_id = $rs[$i]['e_id'];
+				if ($i == 0) {
+					$sql = "DELETE FROM synchron WHERE u_id = $u_id AND e_id IN ($e_id";
+				}else{
+					$sql .= ",$e_id";
+				}
+			}
+			$sql .= ")";
+
+			$this->db->query($sql);
+		}
+
+		if ($this->db->affected_rows()) {
+			return array('OK' => "S" . $se_id);
+		}else{
+			return "Repeat";
+		}
+
+		return null;
 	}
 }
