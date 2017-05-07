@@ -312,8 +312,9 @@ class Api extends CI_Controller
 			for ($i=0; $i < intval($rsm['seasons'][0]['se_id']); $i++) { 
 				$temp = 0;
 				$list = $rsm['seasons'][$i]['episodes'];
+				$rsm['show']['next_ep_time'] = "已全部播放完";
 				for ($j=0; $j < count($list); $j++) { 
-					if ($list[$j]['e_status'] == "0") {
+					if ($list[$j]['e_status'] == false) {
 						$rsm['show']['next_ep_time'] = $list[$j]['e_time'];
 						$temp = 1;
 						break;
@@ -325,23 +326,9 @@ class Api extends CI_Controller
 			}
 
 			//获取最后一集 已播放剧的时间
-			for ($i=0; $i < intval($rsm['seasons'][0]['se_id']); $i++) { 
-				$temp = 0;
-				$list = $rsm['seasons'][$i]['episodes'];
-				for ($j=intval($rsm['seasons'][$i]['count_of_ep'])-1; $j >= 0 ; $j--) {
-					// echo "当前剧是第几集" .  $list[$j]['e_num'];
-					if ($list[$j]['e_status'] == "1") {
-						$rsm['show']['last_se_id'] = $rsm['seasons'][$i]['se_id'];
-						$rsm['show']['last_ep_num'] = $list[$j]['e_num'];
-						$temp = 1;
-						break;
-					}
-				}
-				if ($temp == 1) {
-					break;
-				}
-			}
-
+			$result = $this->ShowModel->getLastEpInfo($id);
+			$rsm['show']['last_se_id'] = $result['last_se_id'];
+			$rsm['show']['last_ep_num'] = $result['last_ep_num'];
 
 			if (!empty($u_id)) 
 			{
@@ -753,10 +740,11 @@ class Api extends CI_Controller
 
 		foreach ($rsm['mySubscribe'] as &$oneSubcribe) 
 		{
+			$oneSubcribe['count_of_ep'] = $this->ShowModel->getNumbersOfEp($oneSubcribe['s_id']);
+			$oneSubcribe['count_of_syn_ep'] = $this->ShowModel->getWatchedNumbersOfEp($u_id,$oneSubcribe['s_id']);
 			$oneSubcribe['percent'] = $this->ShowModel->getSynPercent($u_id,$oneSubcribe['s_id']);
 		}
-		
-
+				
 		// if (empty($rsm['rescentEps']) && empty($rsm['mySubscribe'])) 
 		// {
 		// 	$errno = 3;
@@ -1008,6 +996,11 @@ class Api extends CI_Controller
 		$this->load->view('apiTemplate',$data);	
 	}
 
+	//4.27 整季订阅
+	public function subscibeTheSeason(){
+
+	}
+
 	//二期工程预告：从一个剧中不断添加条件之后筛选出剧的方法入口
 	//目前仅实现全部剧的搜索
 	public function showFilter()
@@ -1075,5 +1068,93 @@ class Api extends CI_Controller
 		$mid = str_replace('?', ' ', $mid);
 		$mid = str_replace('*', ' ', $mid);
 		return $mid;
+	}
+
+	//4.27影视库功能
+	public function newShowFilter(){
+		$this->load->model('ShowModel');
+
+		$character = $this->input->get('flag',TRUE);
+
+		$rsm = null;
+		if (empty($character)) {
+			$errno = 4;
+			$err = $this->errorList[$errno].'Empty character';
+		}else{
+			$errno = 1;
+			$err = '';
+			$rsm = $this->ShowModel->getShowFilter($character);
+		}
+
+		$data['output'] = array(
+			'errno' => $errno,
+			'err' => $err,
+			'rsm' => $rsm
+			);
+		$this->load->view('apiTemplate',$data);
+	}
+
+	// 整季订阅
+	public function subscribeFullSeason(){
+		$this->load->model('ShowModel');
+
+		$u_id = intval($this->input->get('u_id',TRUE));
+		$token = $this->db->escape($this->input->get('u_token',true));
+		$s_id = intval($this->input->get('s_id',TRUE));
+		$se_id = intval($this->input->get('se_id',TRUE));
+
+		$this->checkLogin($u_id,$token);
+
+		$rsm = null;
+		if (empty($s_id) || empty($se_id)) {
+			$errno = 4;
+			$err = $this->errorList[$errno].'Empty character';
+		}else{
+			$errno = 1;
+			$err = '';
+			$rsm = $this->ShowModel->subscribeFullSeason($u_id,$s_id,$se_id);
+		}
+
+		$data['output'] = array(
+			'errno' => $errno,
+			'err' => $err,
+			'rsm' => $rsm
+			);
+		$this->load->view('apiTemplate',$data);
+	}
+
+	//取消整季订阅
+	public function cancelSubscribeFullSeason(){
+		$this->load->model('ShowModel');
+
+		$u_id = intval($this->input->get('u_id',TRUE));
+		$token = $this->db->escape($this->input->get('u_token',true));
+		$s_id = intval($this->input->get('s_id',TRUE));
+		$se_id = intval($this->input->get('se_id',TRUE));
+
+		$this->checkLogin($u_id,$token);
+
+		$rsm = null;
+		if (empty($s_id) || empty($se_id)) {
+			$errno = 4;
+			$err = $this->errorList[$errno].'Empty character';
+		}else{
+			$errno = 1;
+			$err = '';
+			$rsm = $this->ShowModel->cancelSubscribeFullSeason($u_id,$s_id,$se_id);
+		}
+
+		$data['output'] = array(
+			'errno' => $errno,
+			'err' => $err,
+			'rsm' => $rsm
+			);
+		$this->load->view('apiTemplate',$data);
+	}
+
+	// 5.3 top24 强制跳转接口
+	public function top24(){
+		header("Location: http://yifanslab.cn/ThirdAPI/top24"); 
+		exit;
 	}
 }
