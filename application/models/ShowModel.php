@@ -707,27 +707,24 @@ class ShowModel extends CI_Model{
 	// 5.14 推荐功能
 	public function getDiscover($u_id){
 		$rs = $this->db->query("SELECT shows.* FROM shows,discover WHERE discover.u_id = {$u_id} AND discover.s_id = shows.s_id ORDER BY rating DESC LIMIT 10")->result_array();
-		if (count($rs) == 0) {
-			$rs = null;
-		}else{
-			if (count($rs) < 6) {
-				$num = 10 - count($rs);
-				$sql = "select shows.* from shows join (
-					  select stt.s_id, sum(tw.t_weight) as s_weight 
-					  from show_to_tag as stt 
-					    join (
-					      select t_id, count(stt.s_id) as t_weight 
-					        from show_to_tag as stt join subscribe as sub on stt.s_id = sub.s_id 
-					        where u_id = $u_id
-					        group by t_id
-					    ) as tw on stt.t_id = tw.t_id 
-					    join subscribe as sub on stt.s_id = sub.s_id 
-					  where sub.u_id != $u_id
-					  group by(stt.s_id) 
-					  order by s_weight desc
-					  limit $num) as sw on shows.s_id = sw.s_id";
-				$rs = array_merge($rs, $this->db->query($sql)->result_array());
-			}
+		
+		if (count($rs) < 6) {
+			$num = 10 - count($rs);
+			$sql = "select shows.* from shows join (
+				  select stt.s_id, sum(tw.t_weight) as s_weight 
+				  from show_to_tag as stt 
+				    join (
+				      select t_id, count(stt.s_id) as t_weight 
+				        from show_to_tag as stt join subscribe as sub on stt.s_id = sub.s_id 
+				        where u_id = $u_id
+				        group by t_id
+				    ) as tw on stt.t_id = tw.t_id 
+				    join subscribe as sub on stt.s_id = sub.s_id 
+				  where sub.u_id != $u_id
+				  group by(stt.s_id) 
+				  order by s_weight desc
+				  limit $num) as sw on shows.s_id = sw.s_id";
+			$rs = array_merge($rs, $this->db->query($sql)->result_array());
 		}
 		foreach($rs as &$one){
 			$one['s_sibox_image'] = "http:" . $one['s_sibox_image'];
