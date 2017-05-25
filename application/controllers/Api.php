@@ -1150,6 +1150,12 @@ class Api extends CI_Controller
 			$errno = 1;
 			$err = '';
 			$rsm = $this->ShowModel->subscribeFullSeason($u_id,$s_id,$se_id);
+
+			if ($rsm == "Repeat") {
+				$errno = 3;
+				$err = $this->errorList[3];
+			}
+
 		}
 
 		$data['output'] = array(
