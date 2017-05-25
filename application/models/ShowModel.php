@@ -114,6 +114,7 @@ class ShowModel extends CI_Model{
  			}
  			$rs['s_sibox_image'] = "http:" . $rs['s_sibox_image'];
 			$rs['s_sibig_image'] = str_replace('sibox', 'sibig', $rs['s_sibox_image']);
+			$rs['s_vertical_image'] = str_replace('sibox', 'vertical', $rs['s_sibox_image']);
 			return $rs;
 		}
 		else
@@ -590,32 +591,32 @@ class ShowModel extends CI_Model{
 	public function getLastEpInfo($id = ''){
 		$season = $this->db->query("SELECT se_id FROM episode WHERE s_id = $id ORDER BY se_id DESC")->row_array();
 		$se_num = intval($season['se_id']);
-		$temp = 0;
 		$res = null;
 		$res['last_se_id'] = 0;
 		$res['last_ep_num'] = 0;
 		for ($i=$se_num; $i > 0; $i--) { 
-			$episodes = $this->db->query("SELECT e_status,e_num FROM episode WHERE s_id = $id AND se_id = $i ORDER BY e_id DESC")->result_array();
+			$episodes = $this->db->query("SELECT e_status,e_num FROM episode WHERE s_id = $id AND se_id = $i ORDER BY e_num DESC")->result_array();
 			foreach($episodes as $one){
 				if ($one['e_status'] == "已播放") {
 					$res['last_se_id'] = "$i";
 					$res['last_ep_num'] = $one['e_num'];
-					$temp = 1;
+					return $res;
 				}
-			}
-			if ($temp == 1) {
-				break;
 			}
 		}
 		return $res;
 	}
 
 	//4.27影视库功能
-	public function getShowFilter($c){
-		if ($c < 'A' || $c > 'z') {
-			$c = "[^[:alpha:]]";
+	public function getShowFilter($c,$lan){
+		if ($lan == 'en') {
+			if ($c < 'A' || $c > 'z') {
+				$c = "[^[:alpha:]]";
+			}
+			$rsm = $this->db->query("SELECT s_id,s_name,s_name_cn,status,length,area,channel,s_sibox_image FROM shows WHERE s_name REGEXP '^$c'")->result_array();
+		}else{
+			$rsm = $this->db->query("SELECT s_id,s_name,s_name_cn,status,length,area,channel,s_sibox_image FROM shows s,tcosler c WHERE CONV(HEX(LEFT(CONVERT(s_name_cn USING gbk), 1)), 16,10) BETWEEN c.cBegin AND c.cEnd AND fPY = '{$c}'")->result_array();
 		}
-		$rsm = $this->db->query("SELECT s_id,s_name,s_name_cn,status,length,area,channel,s_sibox_image FROM shows WHERE s_name REGEXP '^$c'")->result_array();
 		
 		if (!is_null($rsm)) {
 			foreach($rsm as &$one){
@@ -653,6 +654,9 @@ class ShowModel extends CI_Model{
 	//整季订阅
 	public function subscribeFullSeason($u_id,$s_id,$se_id){
 		$rs = $this->db->query("SELECT e_id FROM episode WHERE s_id = $s_id AND se_id = $se_id AND e_status = '已播放'")->result_array();
+		if (count($rs) == 0) {
+			return "Repeat";
+		}
 		for ($i=0; $i < count($rs); $i++) { 
 			$e_id = $rs[$i]['e_id'];
 			$date = date('Y-m-d H:i:s');
@@ -698,5 +702,38 @@ class ShowModel extends CI_Model{
 		}
 
 		return null;
+	}
+
+	// 5.14 推荐功能
+	public function getDiscover($u_id){
+		$rs = $this->db->query("SELECT shows.* FROM shows,discover WHERE discover.u_id = {$u_id} AND discover.s_id = shows.s_id ORDER BY rating DESC LIMIT 10")->result_array();
+		if (count($rs) == 0) {
+			$rs = null;
+		}else{
+			if (count($rs) < 6) {
+				$num = 10 - count($rs);
+				$sql = "select shows.* from shows join (
+					  select stt.s_id, sum(tw.t_weight) as s_weight 
+					  from show_to_tag as stt 
+					    join (
+					      select t_id, count(stt.s_id) as t_weight 
+					        from show_to_tag as stt join subscribe as sub on stt.s_id = sub.s_id 
+					        where u_id = $u_id
+					        group by t_id
+					    ) as tw on stt.t_id = tw.t_id 
+					    join subscribe as sub on stt.s_id = sub.s_id 
+					  where sub.u_id != $u_id
+					  group by(stt.s_id) 
+					  order by s_weight desc
+					  limit $num) as sw on shows.s_id = sw.s_id";
+				$rs = array_merge($rs, $this->db->query($sql)->result_array());
+			}
+		}
+		foreach($rs as &$one){
+			$one['s_sibox_image'] = "http:" . $one['s_sibox_image'];
+			$one['s_sibig_image'] = str_replace('sibox', 'sibig', $one['s_sibox_image']);
+			$one['s_vertical_image'] = str_replace('sibox', 'vertical',$one['s_sibox_image']);
+		}
+		return $rs;
 	}
 }
