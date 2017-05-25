@@ -127,11 +127,11 @@ class Api extends CI_Controller
 			{
 				if ($this->ShowModel->checkSyn($u_id,$oneShow['e_id']))
 				{
-					$oneShow['syned'] = 'True';
+					$oneShow['syned'] = true;
 				}
 				else
 				{
-					$oneShow['syned'] = 'False';
+					$oneShow['syned'] = false;
 				}
 			}
 			#$data['errorFlag'] = 0;
@@ -365,6 +365,10 @@ class Api extends CI_Controller
 	{
 		$words = $this->db->escape($this->input->get('words',true));
 		$words = substr($words, 1,-1);
+
+		$u_id = intval($this->input->get('u_id',true));
+		$token = $this->db->escape($this->input->get('u_token',true));
+
 		$fullResult = $this->db->escape($this->input->get('fullResult',true));
 		$fullResult = substr($fullResult, 1,-1);
 		$this->load->model('ShowModel');
@@ -396,6 +400,17 @@ class Api extends CI_Controller
 		{
 			$errno = 4;
 			$err = $this->errorList[$errno].'missing parameters';
+		}
+
+		if (!empty($u_id) && !empty($token)) {
+			$this->checkLogin($u_id,$token);
+			foreach($rsm as &$one){
+				$one['subscribed'] = $this->ShowModel->checkSubscribe($u_id,intval($one["s_id"]));
+			}
+		}else{
+			foreach($rsm as &$one){
+				$one['subscribed'] = false;
+			}
 		}
 
 		$data['output'] = array(
@@ -730,11 +745,11 @@ class Api extends CI_Controller
 			$synFlag = $this->ShowModel->checkSyn($u_id,$anEpisode['e_id']);
 			if ($synFlag) 
 			{
-				$anEpisode['syn'] = 1;
+				$anEpisode['syn'] = true;
 			}
 			else
 			{
-				$anEpisode['syn'] = 0;
+				$anEpisode['syn'] = false;
 			}
 		}
 
@@ -1074,16 +1089,38 @@ class Api extends CI_Controller
 	public function newShowFilter(){
 		$this->load->model('ShowModel');
 
+		$u_id = intval($this->input->get('u_id',TRUE));
+		$token = $this->db->escape($this->input->get('u_token'),TRUE);
+
 		$character = $this->input->get('flag',TRUE);
+		$language = $this->input->get('lan',TRUE);
 
 		$rsm = null;
 		if (empty($character)) {
 			$errno = 4;
 			$err = $this->errorList[$errno].'Empty character';
 		}else{
+			if (empty($language)) {
+				$language = "en";
+			}
 			$errno = 1;
 			$err = '';
-			$rsm = $this->ShowModel->getShowFilter($character);
+			$rsm = $this->ShowModel->getShowFilter($character,$language);
+
+			//判断登录
+			$isLogin = false;
+			if (!empty($u_id) && !empty($token)	) {
+				$this->checkLogin($u_id,$token);
+				$isLogin = true;
+			}
+
+			foreach($rsm as &$one){
+				if ($isLogin) {
+					$one['subscribed'] = $this->ShowModel->checkSubscribe($u_id,intval($one['s_id']));
+				}else{
+					$one['subscribed'] = false;
+				}
+			}
 		}
 
 		$data['output'] = array(
@@ -1156,5 +1193,25 @@ class Api extends CI_Controller
 	public function top24(){
 		header("Location: http://yifanslab.cn/ThirdAPI/top24"); 
 		exit;
+	}
+
+	// 5.14 发现接口
+	public function discover(){
+		$u_id = intval($this->input->get('u_id',TRUE));
+		$u_token = $this->db->escape($this->input->get('u_token',TRUE));
+
+		$this->load->model('ShowModel');
+		$this->checkLogin($u_id,$u_token);
+
+		$errno = 1;
+		$err = '';
+		$rsm = $this->ShowModel->getDiscover($u_id);
+
+		$data['output'] = array(
+			'errno' => $errno,
+			'err' => $err,
+			'rsm' => $rsm
+			);
+		$this->load->view('apiTemplate',$data);
 	}
 }
